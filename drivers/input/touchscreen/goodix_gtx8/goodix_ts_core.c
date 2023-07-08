@@ -50,7 +50,6 @@ static int goodix_ts_rotation(struct goodix_ts_core *core_data, int value);
 static void goodix_resume_work(struct work_struct *work);
 void ATR_touch_new(struct device *dev, int id,int action, int x, int y, int random);
 int goodix_change_config(struct goodix_ts_core *core_data, const char *fw_name);
-void charge_mode_enable(struct goodix_ts_core *core_data, bool en);
 int read_chip_cmd(struct goodix_ts_core *core_data, u16 cmd_addr, int buf_len, u8 *buffer);
 
 #define GLOVE                  "driver/glove"
@@ -1697,33 +1696,6 @@ static ssize_t dongle_state_store(struct device *dev,
 	return count;
 }
 
-static ssize_t charge_mode_show(struct device *dev,
-				     struct device_attribute *attr, char *buf)
-{
-	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
-
-	return scnprintf(buf, PAGE_SIZE, "%d\n", atomic_read(&core_data->charge_mode));
-}
-
-static ssize_t charge_mode_store(struct device *dev,
-				      struct device_attribute *attr, const char *buf, size_t count)
-{
-	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
-	int value;
-
-	sscanf(buf, "%d", &value);
-	if ((value != 0) && (value != 1)) {
-		ts_info("charge_mode : %d\n",value);
-		return -EINVAL;
-	}
-	if(value == 0)
-		charge_mode_enable(core_data, false);
-	else
-		charge_mode_enable(core_data, true);
-
-	return count;
-}
-
 static ssize_t FP_area_show(struct device *dev,
 				     struct device_attribute *attr, char *buf)
 {
@@ -1938,7 +1910,6 @@ static DEVICE_ATTR(glove_mode, S_IRUGO|S_IWUSR, glove_mode_show, glove_mode_stor
 static DEVICE_ATTR(dfps, S_IRUGO|S_IWUSR, dfps_show, dfps_store);
 static DEVICE_ATTR(sampleratelocked, S_IRUGO|S_IWUSR, sampleratelocked_show, sampleratelocked_store);
 static DEVICE_ATTR(dongle_state,S_IRUGO|S_IWUSR, NULL, dongle_state_store);
-static DEVICE_ATTR(charge_mode,S_IRUGO|S_IWUSR, charge_mode_show, charge_mode_store);
 static DEVICE_ATTR(FP_area,S_IRUGO|S_IWUSR, FP_area_show, FP_area_store);
 static DEVICE_ATTR(phone_state_on,S_IRUGO|S_IWUSR, NULL, phone_state_store);
 static DEVICE_ATTR(chip_debug,S_IRUGO|S_IWUSR, chip_debug_show, NULL);
@@ -1979,7 +1950,6 @@ static struct attribute *sysfs_attrs[] = {
 	&dev_attr_dfps.attr,
 	&dev_attr_sampleratelocked.attr,
 	&dev_attr_dongle_state.attr,
-	&dev_attr_charge_mode.attr,
 	&dev_attr_FP_area.attr,
 	&dev_attr_phone_state_on.attr,
 	&dev_attr_chip_debug.attr,
@@ -2254,55 +2224,6 @@ static int goodix_ts_rotation(struct goodix_ts_core *core_data, int value)
 	return 0;
 }
 
-void charge_mode_enable(struct goodix_ts_core *core_data, bool en)
-{
-	// 0x4160
-	//  enable : 06 00 00 00 06
-	// disable : 07 00 00 00 07
-	struct goodix_ts_device *ts_dev = core_data->ts_dev;
-	u8 cmd_buf[32];
-	int ret;
-	u32 cmd_len = 0;
-	u16 cmd_addr = 0;
-	
-
-	if (core_data == NULL || core_data->initialized != 1) {
-		ts_info("goodix touch not vaild or init fail\n"); 
-		return;
-	}
-/*
-	if(core_data->station_insert){
-		ts_info("insert into station , not enter charge mode");
-		return;
-	}
-*/
-	cmd_addr = GOODIX_ADDR_SPECIAL_CMD;
-	cmd_len = 5;
-	if(en == true) {
-		ts_info("usb plug , charge mode enable");
-		atomic_set(&core_data->charge_mode, 1);
-		cmd_buf[0] = GOODIX_CMD_CHARGE_MODE_ON;
-	} else {
-		ts_info("usb unplug , charge mode disable");
-		atomic_set(&core_data->charge_mode, 0);
-		cmd_buf[0] = GOODIX_CMD_CHARGE_MODE_OFF;
-	}
-	cmd_buf[1] = 0;
-	cmd_buf[2] = 0x0;
-	cmd_buf[3] = 0;
-	cmd_buf[4] = cmd_buf[0] + cmd_buf[1] + cmd_buf[2];
-
-	ret = core_data->ts_dev->hw_ops->write(ts_dev, cmd_addr, cmd_buf, cmd_len);
-	if (ret) {
-		ts_info("failed write addr(%x) data %*ph\n", cmd_addr,
-			cmd_len, cmd_buf);
-	}
-
-	ts_info("[End] charge mode : %d", atomic_read(&core_data->charge_mode));
-	ts_info("%s write to addr (%x) with data %*ph\n",
-		"success", cmd_addr, cmd_len, cmd_buf);
-}
-
 int get_chip_int(struct goodix_ts_core *core_data)
 {
 	struct goodix_ts_device *ts_dev = core_data->ts_dev;
@@ -2328,16 +2249,6 @@ int get_chip_int(struct goodix_ts_core *core_data)
 
 	return ret;
 }
-
-void gts_usb_plugin(bool plugin)
-{
-	if(plugin == true) {
-		charge_mode_enable(gts_core_data, true);
-	} else {
-		charge_mode_enable(gts_core_data, false);
-	}
-}
-EXPORT_SYMBOL(gts_usb_plugin);
 
 void setting_touch_print_count(int count)
 {
@@ -4140,7 +4051,6 @@ out:
 	core_data->aod_test_mode = 0;
 	core_data->rotation = 0;
 	core_data->dfps = 90;
-	atomic_set(&core_data->charge_mode, 0);
 	atomic_set(&core_data->testcfg, 0);
 	atomic_set(&core_data->glove_mode, 0);
 	core_data->game_mode = true;

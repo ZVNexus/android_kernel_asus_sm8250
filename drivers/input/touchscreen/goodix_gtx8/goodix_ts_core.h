@@ -519,7 +519,6 @@ struct goodix_ts_core {
 	int aod_test_mode;
 	int rotation;
 	int dfps;
-	atomic_t charge_mode;
 	atomic_t glove_mode;
 	atomic_t testcfg;
 	atomic_t dsi_suspend;

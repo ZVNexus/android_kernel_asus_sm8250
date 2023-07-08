@@ -151,7 +151,6 @@ void asus_monitor_thermal_management(void);
 //ASUS BSP : Extern function from other driver +++
 extern int fg_get_msoc(struct fg_dev *chip, int *msoc);
 extern void focal_usb_detection(bool plugin);		//ASUS BSP Nancy : notify touch cable in +++
-extern void gts_usb_plugin(bool plugin);
 extern int rt_chg_get_curr_state(void);
 extern bool rt_chg_check_asus_vid(void);
 extern bool PE_check_asus_vid(void);
@@ -168,9 +167,6 @@ extern char *saved_command_line;
 //ASUS BSP : Add ASUS interfaces +++
 int asus_request_POGO_otg_en(bool enable);
 //ASUS BSP : Add ASUS interfaces ---
-
-bool notify_touch_usbplug = false;
-EXPORT_SYMBOL(notify_touch_usbplug);
 
 enum ADAPTER_ID {
 	NONE = 0,
@@ -6044,11 +6040,6 @@ void asus_typec_removal_function(struct smb_charger *chg)
 			smblib_err(chg, "Couldn't restore aicl_cont_threshold, rc=%d",
 					rc);
 	}
-	
-	if (notify_touch_usbplug) {
-	    notify_touch_usbplug = false;
-	    gts_usb_plugin(false);
-	}
 }
 
 /************************
@@ -8867,12 +8858,6 @@ void smblib_usb_plugin_hard_reset_locked(struct smb_charger *chg)
 	power_supply_changed(chg->usb_psy);
 	smblib_dbg(chg, PR_INTERRUPT, "IRQ: usbin-plugin %s\n",
 					vbus_rising ? "attached" : "detached");
-	if (vbus_rising) {
-	    if (!notify_touch_usbplug) {
-	      notify_touch_usbplug = true;
-	      gts_usb_plugin(true);
-	    }
-	}
 }
 
 #define PL_DELAY_MS	30000
@@ -9151,12 +9136,6 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 
 	smblib_dbg(chg, PR_INTERRUPT, "IRQ: usbin-plugin %s\n",
 					vbus_rising ? "attached" : "detached");
-	if (vbus_rising) {
-	    if (!notify_touch_usbplug) {
-	      notify_touch_usbplug = true;
-	      gts_usb_plugin(true);
-	    }
-	}
 }
 
 irqreturn_t usb_plugin_irq_handler(int irq, void *data)
